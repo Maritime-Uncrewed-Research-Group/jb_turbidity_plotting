@@ -218,3 +218,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 data/
+figs/
+*.h5
+*turbidity_survey_*.png

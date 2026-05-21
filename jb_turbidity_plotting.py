@@ -1,6 +1,7 @@
 import re
 import os.path as path
 from datetime import datetime, timezone
+import argparse
 
 import h5py
 import numpy as np
@@ -305,7 +306,7 @@ def plot_ground_track(turbidity_survey_df: pd.DataFrame, save_dir: str):
     plt.tight_layout()
     plt.show()
     plt.savefig(
-        path.join(save_dir, f"jaiabot_{start_time_dt.strftime("%Y%m%dT%H%M%S")}_turbidity_survey_ground_track.png"))
+        path.join(save_dir, f"jaiabot_{start_time_dt.strftime('%Y%m%dT%H%M%S')}_turbidity_survey_ground_track.png"))
     plt.clf()
 
 def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFrame, save_dir: str):
@@ -347,6 +348,9 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
 
     dive_nums = np.arange(1, len(dive_lons)+1)
 
+    start_time = min(turbidity_survey_df['_utime_'])
+    start_time_dt = datetime.fromtimestamp(start_time / 1_000_000, tz=timezone.utc)
+
     for i in range(len(dive_nums)):
         curr_turbidity_survey_df = dive_turbidity_dfs[i]
         pc = plt.scatter(curr_turbidity_survey_df['concentration'], curr_turbidity_survey_df['depth'],
@@ -366,7 +370,7 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
         plt.show()
         currfig.savefig(
             path.join(save_dir,
-                      f"jaiabot_{start_time_dt.strftime("%Y%m%dT%H%M%S")}_dive_{dive_nums[i]}_turbidity_profile.png"))
+                      f"jaiabot_{start_time_dt.strftime('%Y%m%dT%H%M%S')}_dive_{dive_nums[i]}_turbidity_profile.png"))
         plt.clf()
 
     survey_plot_df.drop(survey_plot_df[survey_plot_df['lat'] == 0].index,
@@ -405,17 +409,33 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
     fig = plt.gcf()
     plt.show()
     fig.savefig(
-        path.join(save_dir, f"jaiabot_{start_time_dt.strftime("%Y%m%dT%H%M%S")}_turbidity_survey_ground_track.png"))
+        path.join(save_dir, f"jaiabot_{start_time_dt.strftime('%Y%m%dT%H%M%S')}_turbidity_survey_ground_track.png"))
     plt.close()
 
 if __name__ == '__main__':
-    jaia_h5_path = r"C:\Users\RDCHLMS9\PycharmProjects\jb_turbidity_plotting\data\bot1_fleet14_20260518T132514.h5"
-    start_time = "18:00:49" # Format 'HH:MM:SS' in UTC
-    end_time = "18:30:00"  # Format 'HH:MM:SS' in UTC
-    plot_dive_profiles = True # If true, plots individual dive profiles using plot_turbidity_dives(), else plots ground track using plot_ground_track()
-    save_dir = r"figs"
+    parser = argparse.ArgumentParser(description="Plot Jaiabot turbidity data and profiles from an h5 file.")
+    parser.add_argument("jaia_h5_path", type=str, help="Path to Jaia h5 file")
+    parser.add_argument("--start-time", type=str, default=None, help="Start time in UTC ('HH:MM:SS')")
+    parser.add_argument("--end-time", type=str, default=None, help="End time in UTC ('HH:MM:SS')")
+    parser.add_argument("--no-dive-profiles", dest="plot_dive_profiles", action="store_false",
+                        help="Plot ground track instead of individual dive profiles")
+    parser.add_argument("--save-dir", type=str, default=".", help="Directory where figures will be saved")
 
-    date = re.findall(r"_\d{8}T", jaia_h5_path)[0][1:-1]
+    args = parser.parse_args()
+
+    jaia_h5_path = args.jaia_h5_path
+    start_time = args.start_time
+    end_time = args.end_time
+    plot_dive_profiles = args.plot_dive_profiles
+    save_dir = args.save_dir
+
+    if start_time is not None or end_time is not None:
+        try:
+            date = re.findall(r"_\d{8}T", jaia_h5_path)[0][1:-1]
+        except IndexError:
+            raise ValueError("Could not extract date from jaia_h5_path. File name must contain '_YYYYMMDDT'.")
+    else:
+        date = None
 
     if start_time is not None:
         start_time_dt = datetime.strptime(date + start_time + "+0000", "%Y%m%d%H:%M:%S%z")
@@ -427,8 +447,14 @@ if __name__ == '__main__':
         end_time_dt = None
 
     turbidity_df = load_turbidity_data(jaia_h5_path, start_time_dt, end_time_dt)
+    if turbidity_df is None:
+        exit(1)
     pos_df = load_pos_data(jaia_h5_path, start_time_dt, end_time_dt)
+    if pos_df is None:
+        exit(1)
     depth_df = load_depth_data(jaia_h5_path, start_time_dt, end_time_dt)
+    if depth_df is None:
+        exit(1)
     turbidity_survey_df = interp_jaia_h5s(turbidity_df, pos_df, depth_df)
 
     if plot_dive_profiles:
@@ -436,3 +462,4 @@ if __name__ == '__main__':
         plot_turbidity_dives(turbidity_survey_df, dives_df, save_dir)
     else:
         plot_ground_track(turbidity_survey_df, save_dir)
+    exit(0)
