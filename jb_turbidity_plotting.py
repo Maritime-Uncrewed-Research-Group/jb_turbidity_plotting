@@ -1,4 +1,5 @@
 import re
+import os.path as path
 from datetime import datetime, timezone
 
 import h5py
@@ -269,7 +270,7 @@ def interp_jaia_h5s(turbidity_df: pd.DataFrame, pos_df: pd.DataFrame, depth_df: 
     turbidity_survey_df = turbidity_survey_df.dropna()
     return turbidity_survey_df.reset_index(drop=True)
 
-def plot_ground_track(turbidity_survey_df: pd.DataFrame):
+def plot_ground_track(turbidity_survey_df: pd.DataFrame, save_dir: str):
     """
         Function to plot 2D ground track of jaiabot survey, colored by turbidity value.
         Input:
@@ -286,12 +287,14 @@ def plot_ground_track(turbidity_survey_df: pd.DataFrame):
     concentration = survey_plot_df['concentration']
     start_time = min(survey_plot_df['_utime_'])
 
+    start_time_dt = datetime.fromtimestamp(start_time/1_000_000, tz=timezone.utc)
+
     pc = plt.scatter(lon, lat, c=concentration, cmap='autumn', label=f"Turbidity Data Points: {len(concentration)}")
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
     plt.title(f'Turbidity Map')
     plt.suptitle(f"Jaiabot Turbidity Survey: " +
-                 datetime.fromtimestamp(start_time/1_000_000, tz=timezone.utc).strftime("%A, %B %d, %Y %H:%M:%S UTC"))
+                 start_time_dt.strftime("%A, %B %d, %Y %H:%M:%S UTC"))
     plt.colorbar(pc, label='Turbidity (NTU)', location='right')
     plt.legend(loc="upper left")
     ax = plt.gca()
@@ -301,9 +304,11 @@ def plot_ground_track(turbidity_survey_df: pd.DataFrame):
     ax.ticklabel_format(useOffset=False, style='plain')
     plt.tight_layout()
     plt.show()
+    plt.savefig(
+        path.join(save_dir, f"jaiabot_{start_time_dt.strftime("%Y%m%dT%H%M%S")}_turbidity_survey_ground_track.png"))
     plt.clf()
 
-def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFrame):
+def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFrame, save_dir: str):
     survey_plot_df = turbidity_survey_df.copy()
 
     dive_min_turbidity = 501.0 # sensor max value is 500 NTU
@@ -356,7 +361,12 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
                                             tz=timezone.utc).strftime("%A, %B %d, %Y %H:%M:%S UTC"))
         plt.gca().invert_yaxis()
         plt.tight_layout()
+
+        currfig = plt.gcf()
         plt.show()
+        currfig.savefig(
+            path.join(save_dir,
+                      f"jaiabot_{start_time_dt.strftime("%Y%m%dT%H%M%S")}_dive_{dive_nums[i]}_turbidity_profile.png"))
         plt.clf()
 
     survey_plot_df.drop(survey_plot_df[survey_plot_df['lat'] == 0].index,
@@ -392,14 +402,18 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
     ax.set_aspect('equal')
     ax.ticklabel_format(useOffset=False, style='plain')
     plt.tight_layout()
+    fig = plt.gcf()
     plt.show()
-    plt.clf()
+    fig.savefig(
+        path.join(save_dir, f"jaiabot_{start_time_dt.strftime("%Y%m%dT%H%M%S")}_turbidity_survey_ground_track.png"))
+    plt.close()
 
 if __name__ == '__main__':
     jaia_h5_path = r"C:\Users\RDCHLMS9\PycharmProjects\jb_turbidity_plotting\data\bot1_fleet14_20260518T132514.h5"
     start_time = "18:00:49" # Format 'HH:MM:SS' in UTC
     end_time = "18:30:00"  # Format 'HH:MM:SS' in UTC
     plot_dive_profiles = True # If true, plots individual dive profiles using plot_turbidity_dives(), else plots ground track using plot_ground_track()
+    save_dir = r"figs"
 
     date = re.findall(r"_\d{8}T", jaia_h5_path)[0][1:-1]
 
@@ -419,6 +433,6 @@ if __name__ == '__main__':
 
     if plot_dive_profiles:
         dives_df = load_dive_data(jaia_h5_path, start_time_dt, end_time_dt)
-        plot_turbidity_dives(turbidity_survey_df, dives_df)
+        plot_turbidity_dives(turbidity_survey_df, dives_df, save_dir)
     else:
-        plot_ground_track(turbidity_survey_df)
+        plot_ground_track(turbidity_survey_df, save_dir)
