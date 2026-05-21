@@ -5,7 +5,6 @@ import h5py
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.colors
 
 def load_turbidity_data(jaia_h5_path: str, start_time_dt=None, end_time_dt=None) -> pd.DataFrame:
     """
@@ -25,12 +24,12 @@ def load_turbidity_data(jaia_h5_path: str, start_time_dt=None, end_time_dt=None)
 
     turbidity_utime_path = '/jaiabot::fluorometer/jaiabot.sensor.protobuf.TurnerCFluor/_utime_'
     turbidity_concentration_path = '/jaiabot::fluorometer/jaiabot.sensor.protobuf.TurnerCFluor/concentration'
-    turbidity_concentration_voltage_path = '/jaiabot::fluorometer/jaiabot.sensor.protobuf.TurnerCFluor/concentration_voltage'
+    turbidity_concentration_v_path = '/jaiabot::fluorometer/jaiabot.sensor.protobuf.TurnerCFluor/concentration_voltage'
 
     try:
         turbidity_utime = jaia_h5[turbidity_utime_path][:]
         turbidity_concentration = jaia_h5[turbidity_concentration_path][:]
-        turbidity_concentration_voltage = jaia_h5[turbidity_concentration_voltage_path][:]
+        turbidity_concentration_voltage = jaia_h5[turbidity_concentration_v_path][:]
     except KeyError:
         print(f"Turbidity data h5 keys not found in the provided h5. Was C-FLUOR sensor installed for this deployment?")
         jaia_h5.close()
@@ -38,7 +37,9 @@ def load_turbidity_data(jaia_h5_path: str, start_time_dt=None, end_time_dt=None)
 
     jaia_h5.close()
 
-    turbidity_dict = {'_utime_': turbidity_utime, 'concentration': turbidity_concentration, 'concentration_voltage': turbidity_concentration_voltage}
+    turbidity_dict = {'_utime_': turbidity_utime,
+                      'concentration': turbidity_concentration,
+                      'concentration_voltage': turbidity_concentration_voltage}
 
     turbidity_df = pd.DataFrame(data=turbidity_dict)
 
@@ -216,7 +217,7 @@ def load_dive_data(jaia_h5_path: str, start_time_dt=None, end_time_dt=None) -> p
 
 def fix_concentration_values(turbidity_df: pd.DataFrame, offset_volts: float, coefficient_NTU_per_volt: float):
     """
-        Function to perform inplace correction of concentration values, then removes obviously bad readings (concentration < 0 NTU).
+        Function to perform inplace correction of concentration values, then removes  bad readings (concentration < 0 NTU).
         Correction performed using formula: (concentration_voltage - offset_volts)*coefficient_NTU_per_volt
         Input:
         - turbidity_df: dataframe containing jaia turbidity data from load_turbidity_data()
@@ -240,14 +241,17 @@ def interp_jaia_h5s(turbidity_df: pd.DataFrame, pos_df: pd.DataFrame, depth_df: 
         - pos_df: dataframe with GPS data, created by load_pos_data() (5hz)
         - depth_df: dataframe with depth data, created by load_depth_data() (10hz)
         Outputs:
-        - pandas dataframe containing all turbidity, pos, and depth data interpolated to the same time series: turbidity_survey_df
+        - pandas dataframe containing all turbidity, pos, and
+          depth data interpolated to the same time series: turbidity_survey_df
     """
     pos_utime = pos_df['_utime_']
     turbidity_utime = turbidity_df['_utime_']
     depth_utime = depth_df['_utime_']
 
-    turbidity_concentration_interp = np.interp(pos_utime, turbidity_utime, turbidity_df['concentration'], left=np.nan, right=np.nan)
-    turbidity_concentration_voltage_interp = np.interp(pos_utime, turbidity_utime, turbidity_df['concentration_voltage'], left=np.nan, right=np.nan)
+    turbidity_concentration_interp = np.interp(pos_utime, turbidity_utime, turbidity_df['concentration'],
+                                               left=np.nan, right=np.nan)
+    turbidity_concentration_voltage_interp = np.interp(pos_utime, turbidity_utime, turbidity_df['concentration_voltage'],
+                                                       left=np.nan, right=np.nan)
 
     depth_sensor_depth_interp = np.interp(pos_utime, depth_utime, depth_df['depth'], left=np.nan, right=np.nan)
 
@@ -274,18 +278,20 @@ def plot_ground_track(turbidity_survey_df: pd.DataFrame):
         - 2D ground track turbidity survey plot
     """
     survey_plot_df = turbidity_survey_df.copy()
-    survey_plot_df.drop(survey_plot_df[survey_plot_df['lat'] == 0].index, inplace=True) # survey values from pre-GPS fix and during dives
+    survey_plot_df.drop(survey_plot_df[survey_plot_df['lat'] == 0].index,
+                        inplace=True) # survey values from pre-GPS fix and during dives
 
     lat = survey_plot_df['lat']
     lon = survey_plot_df['lon']
     concentration = survey_plot_df['concentration']
     start_time = min(survey_plot_df['_utime_'])
 
-    pc = plt.scatter(lon, lat, c=concentration, cmap='ocean', label=f"Turbidity Data Points: {len(concentration)}")
+    pc = plt.scatter(lon, lat, c=concentration, cmap='autumn', label=f"Turbidity Data Points: {len(concentration)}")
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
     plt.title(f'Turbidity Map')
-    plt.suptitle(f"Jaiabot Turbidity Survey: " + datetime.fromtimestamp(start_time/1_000_000, tz=timezone.utc).strftime("%A, %B %d, %Y %H:%M:%S UTC"))
+    plt.suptitle(f"Jaiabot Turbidity Survey: " +
+                 datetime.fromtimestamp(start_time/1_000_000, tz=timezone.utc).strftime("%A, %B %d, %Y %H:%M:%S UTC"))
     plt.colorbar(pc, label='Turbidity (NTU)', location='right')
     plt.legend(loc="upper left")
     ax = plt.gca()
@@ -304,7 +310,6 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
     dive_max_turbidity = -1.0 # sensor min value is 0 NTU
 
     dive_start_times = []
-    dive_end_times = []
     dive_lats = []
     dive_lons = []
     dive_turbidity_dfs = []
@@ -315,7 +320,6 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
             continue
 
         dive_start_times.append(dive.start_time)
-        dive_end_times.append(dive.end_time)
         dive_lats.append(dive.lat)
         dive_lons.append(dive.lon)
 
@@ -336,13 +340,20 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
         survey_plot_df = survey_plot_df[~dive_pts_mask]
         survey_plot_df.reset_index(drop=True, inplace=True)
 
+    dive_nums = np.arange(1, len(dive_lons)+1)
 
-    for curr_turbidity_survey_df in dive_turbidity_dfs:
-        pc = plt.scatter(curr_turbidity_survey_df['concentration'], curr_turbidity_survey_df['depth'], c=curr_turbidity_survey_df['concentration'], vmin=dive_min_turbidity, vmax=dive_max_turbidity)
+    for i in range(len(dive_nums)):
+        curr_turbidity_survey_df = dive_turbidity_dfs[i]
+        pc = plt.scatter(curr_turbidity_survey_df['concentration'], curr_turbidity_survey_df['depth'],
+                         c=curr_turbidity_survey_df['concentration'], cmap='autumn',
+                         vmin=dive_min_turbidity, vmax=dive_max_turbidity)
         plt.colorbar(pc, label='Turbidity (NTU)', location='right')
         plt.xlabel('Turbidity (NTU)')
         plt.ylabel('Depth (m)')
-        plt.title(f'Turbidity Profile at {dive.lat}, {dive.lon}')
+        plt.title(f'Turbidity Profile at {dive_lats[i]}, {dive_lons[i]}')
+        plt.suptitle(f'Dive {dive_nums[i]}: '+
+                     datetime.fromtimestamp(dive_start_times[i] / 1_000_000,
+                                            tz=timezone.utc).strftime("%A, %B %d, %Y %H:%M:%S UTC"))
         plt.gca().invert_yaxis()
         plt.tight_layout()
         plt.show()
@@ -359,8 +370,14 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
     survey_min_turbidity = min(concentration)
     survey_max_turbidity = max(concentration)
 
-    pc = plt.scatter(lon, lat, c=concentration, label=f"Turbidity Data Points: {len(concentration)}", vmin=survey_min_turbidity, vmax=survey_max_turbidity, zorder=5)
-    plt.scatter(dive_lons, dive_lats, c=dive_mean_turbiditys, marker='s', s=100, edgecolor='k', label=f"Jaiabot Dives, Mean Turbidity", vmin=survey_min_turbidity, vmax=survey_max_turbidity, zorder=10)
+    pc = plt.scatter(lon, lat, c=concentration, label=f"Turbidity Data Points: {len(concentration)}",
+                     cmap='autumn', vmin=survey_min_turbidity, vmax=survey_max_turbidity, zorder=5)
+    plt.scatter(dive_lons, dive_lats, c=dive_mean_turbiditys, marker='s', s=200, edgecolor='k', linewidth=3,
+                label=f"Jaiabot Dives, Mean Turbidity", cmap='autumn',
+                vmin=survey_min_turbidity, vmax=survey_max_turbidity, zorder=10)
+    for dive_lon, dive_lat, num in zip(dive_lons, dive_lats, dive_nums):
+        plt.text(dive_lon, dive_lat, str(num), color="white", fontsize=10,
+                 horizontalalignment='center', verticalalignment='center', zorder=15)
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
     plt.title(f'Turbidity Map')
@@ -368,7 +385,7 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
         f"Jaiabot Turbidity Survey: " + datetime.fromtimestamp(start_time / 1_000_000, tz=timezone.utc).strftime(
             "%A, %B %d, %Y %H:%M:%S UTC"))
     plt.colorbar(pc, label='Turbidity (NTU)', location='right')
-    plt.legend(loc="upper left")
+    plt.legend()
     ax = plt.gca()
     ax.set_xlim((min(lon) - 0.0001, max(lon) + 0.0001))
     ax.set_ylim((min(lat) - 0.0001, max(lat) + 0.0001))
@@ -385,8 +402,6 @@ if __name__ == '__main__':
     plot_dive_profiles = True # If true, plots individual dive profiles using plot_turbidity_dives(), else plots ground track using plot_ground_track()
 
     date = re.findall(r"_\d{8}T", jaia_h5_path)[0][1:-1]
-    time = re.findall(r"T\d{6}.", jaia_h5_path)[0][1:-1]
-
 
     if start_time is not None:
         start_time_dt = datetime.strptime(date + start_time + "+0000", "%Y%m%d%H:%M:%S%z")
