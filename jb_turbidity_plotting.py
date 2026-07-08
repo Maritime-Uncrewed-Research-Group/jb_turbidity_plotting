@@ -320,7 +320,15 @@ def plot_turbidity_dives(turbidity_survey_df: pd.DataFrame, dives_df: pd.DataFra
     dive_lons = []
     dive_turbidity_dfs = []
     dive_mean_turbiditys = []
+
+    processed_dive_start_times = set() # key by start_time rounded to nearest sec to avoid doubleplotting full precision and rounded task packets
     for dive in dives_df.itertuples(index=False): # (start_time, end_time, lat, lon)
+        start_time_nearest_sec = round(dive.start_time / 1e6)
+        if start_time_nearest_sec in processed_dive_start_times:
+            continue
+
+        processed_dive_start_times.add(start_time_nearest_sec)
+
         dive_pts_mask = (survey_plot_df["_utime_"] >= dive.start_time) & (survey_plot_df["_utime_"] <= dive.end_time)
         if dive_pts_mask.sum() == 0:
             continue
